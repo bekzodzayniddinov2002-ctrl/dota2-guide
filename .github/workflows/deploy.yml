@@ -1,0 +1,80 @@
+# Saytni GitHub Pages'ga joylaydi va ma'lumotlarni avtomatik yangilaydi.
+#  * har 3 soatda: Steam yangiliklari
+#  * har kuni 03:30 (UTC): geroylar, predmetlar, patch, buildlar, statistika, o'zbekcha tarjima
+#  * qo'lda: Actions -> "Deploy" -> Run workflow (full = true bo'lsa hammasi yangilanadi)
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 */3 * * *"
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Barcha ma'lumotlarni qayta yig'ish"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Full data rebuild
+        id: full
+        if: github.event.schedule == '30 3 * * *' || inputs.full
+        continue-on-error: true
+        run: |
+          python tools/build_data.py --fresh
+          python tools/translate_uz.py
+
+      - name: Commit updated data
+        if: steps.full.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898729+github-actions[bot]@users.noreply.github.com"
+          git add data .cache/tr_uz.json .cache/tr_ru.json
+          git diff --cached --quiet || (git commit -m "Ma'lumotlar yangilandi $(date -u +%F)" && git push)
+
+      - name: News
+        continue-on-error: true
+        run: python tools/news.py
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r web/* _site/
+          cp -r data _site/data
+          rm -f _site/data/uz_glossary.json _site/data/uz_overrides.json
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

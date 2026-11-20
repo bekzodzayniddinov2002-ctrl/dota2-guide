@@ -1,0 +1,12 @@
+# Yuklangan xom ma'lumotlar keshi (qayta yuklanadi); tarjima keshi esa saqlanadi
+.cache/*
+!.cache/tr_uz.json
+!.cache/tr_ru.json
+
+# Yangiliklar har deployda yangidan olinadi
+data/news.*.json
+
+__pycache__/
+*.pyc
+_site/
+.claude/
